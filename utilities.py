@@ -12,7 +12,7 @@ from tensorflow import Tensor
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.layers import Input, Add
 
-
+verbose = False
 
 
 def load_dataset(save_path):
