@@ -1,16 +1,3 @@
-
-
-
-
-# the purpose of this autoencoder is actually implement some research where they use a pretrained autoencoder as the
-# generator in a GAN, and claim that it prevents mode collapse and reduces training time.
-# i am going to upload that part as soon as i can figure out how to make it work.
-# ive been having a hard time finding a gan architecture that works, maybe ill have to actually read the paper
-# that paper is here https://arxiv.org/abs/2002.02112
-
-#todo: this code was basically assembled from the keras documentation and maybe some blog posts, i need to create
-#       a proper bibliography for this code. shown below is the original header from François Chollet
-
 """
 Title: Multi-GPU and distributed training
 Author: [fchollet](https://twitter.com/fchollet)
@@ -20,13 +7,10 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 """
 
 # some resnet stuff from https://towardsdatascience.com/building-a-resnet-in-keras-e8f1322a49ba
-
-# NOTE: this version of keras or whatever (tensorflow==2.2.0) requires cuda==10.1
-
-# NOTE: this script seems to work fine on tensorflow 2.3.0, and also tf 2.4.0 which has some
-#       cool features but also some bad memory leaks that made it unusable. #todo: post that version too
+# NOTE: this version of keras or whatever requires cuda==10.1
 
 
+from utilities import *
 import os
 
 import tensorflow as tf
@@ -39,6 +23,8 @@ from tensorflow.keras.layers import Input, Add
 from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, AveragePooling2D, Flatten, Conv2DTranspose
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+
+## hyper parameters ?
 
 TRAINING = True
 verbose = False
@@ -54,18 +40,24 @@ checkpoint_dir = "./ae_checkpoints/"
 target_size = (64, 64)  # image size in pixels
 dropout_rate = 0.2
 
-#here goes the path to the ms celeb dataset
-#data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
-data_path = '/media/cameron/angelas files/100faces'
+#data_path = '/mnt/md0/datasets/gw/'
+#data_path = '/home/cameron/PycharmProjects/keras-unbalanced-GANs/dataset/'
+#data_path = '/mnt/md0/datasets/100faces/'
+
+data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
+#data_path = '/media/cameron/angelas files/100faces/'
+
+#data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
 
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1";
 
 
 
-###################################### if you have only 1 GPU just comment this out:
+# if you have only 1 GPU just comment this out:
 multi_gpu_training = False
+
 if multi_gpu_training:
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(gpus[0], True)
@@ -73,95 +65,6 @@ if multi_gpu_training:
     # tf.config.experimental.set_memory_growth(gpus[2], True)
     # tf.config.experimental.set_memory_growth(gpus[3], True)
 
-
-def log(text):
-    #todo: make this write to a log file
-    if verbose:
-        print(text)
-
-
-def do_inference(model, epoch):
-
-    #todo: this is aweful
-
-    if epoch is None:
-        epoch = 'init'
-    else:
-        epoch = epoch + 1
-
-    datagenerator = model.datagenerator
-
-    if model.loaded == False:
-        #todo: test if this condition ever actually happens
-        log('do_inference recieved unloaded model')
-        model = load_model()
-    else:
-        log('got loaded model for inference')
-
-    log(type(model))
-
-    ## just in case this hasnt already been done
-    model.build(input_shape=(64, 64, 3))
-
-    #idk why
-    if epoch is None:
-        model.summary()
-
-    #get a batch of images from the datagenerator
-    images, labels = datagenerator.next()
-
-    ## make an array of input images
-    in_images =[]
-    i = 0
-    for item in images:
-
-        pil_img = tf.keras.preprocessing.image.array_to_img(item)
-        log(type(pil_img))
-
-        dir = 'ae_samples/'
-
-        if not os.path.exists(dir):
-            os.makedirs(dir)
-
-        in_images.append(pil_img)
-        i = i + 1
-
-    ## do the inference on the inputs
-    result = model.predict(images, batch_size=batch_size)
-
-    ## make an array of output images
-    out_images = []
-    i = 0
-    for item in result:
-        img = item
-        img = img[:, :, 0:3] #/ 127.0
-
-        pil_img = tf.keras.preprocessing.image.array_to_img(img)
-        out_images.append(pil_img)
-        i = i + 1
-
-    #concatenate the two arays of images and add to list
-    a = 1
-    concatted = []
-    for item in zip(in_images, out_images):
-        #get_concat_h(item[0], item[1]).save(dir + '/ae_sample-' + str(a) + '.jpeg')
-        new_img = get_concat_h(item[0], item[1])
-        concatted.append(new_img)
-        a = a + 1
-
-    #concatenate images into rows 4 sets wide
-    rows = []
-    for i in range(0, len(concatted)-1, 4):
-        rows.append(concat_four_h(concatted[i], concatted[i+1], concatted[i+2], concatted[i+3]))
-
-    #concatenate the rows vertically t oform the final image
-    first_img = rows[0]
-    for i in range(1, len(rows)):
-        first_img = get_concat_v(first_img, rows[i])
-
-    #save the image to disk
-    first_img.save('ae_samples/epoch_' + str(epoch) + '.jpeg')
-    #return first_img
 
 ## Create the relu + BatchNormalization layer
 def relu_bn(inputs: Tensor) -> Tensor:
@@ -336,7 +239,7 @@ class VAE(keras.Model):
 
     def call(self, inputs, training=True):
 
-        #todo: this doesnt seem right, yet it still works.
+        #todo: this doesnt seem right, but yet it still works.
 
         latents = self.encoder(inputs)
         result = self.decoder(latents[0])
@@ -368,7 +271,7 @@ def load_model(training=True):
         print("restoring from checkpoint: ", latest_checkpoint)
 
         # parse the filename to get the epoch number of the last checkpoint
-        current_epoch = str(latest_checkpoint).split('checkpoint-')[1]
+        current_epoch = str(latest_checkpoint).split('ckpt-')[1]
         current_epoch = int(current_epoch.split('.h5')[0])
 
         # load the weights from the checkpoint file
@@ -404,18 +307,12 @@ def run_training(model, current_epoch, epochs=10000):
     print('steps per epoch = ' + str(steps_per_epoch))
 
     callbacks = [
-
-        # this is a new feature in tf 2.3 keras and it does essentially the same as the one below but in one line of code
-        # but it only saves the most recent checkpoints so... lets try it out.
-        #keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
-
         # This callback saves a SavedModel every epoch
         # We include the current epoch in the folder name.
+        #keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
         keras.callbacks.ModelCheckpoint(
-            filepath=checkpoint_dir + "/checkpoint-{epoch}.h5", save_freq="epoch"
+            filepath=checkpoint_dir + "/cpkt-{epoch}.h5", save_freq="epoch"
         ),
-
-        #this saves info to tensorboard so we can watch the graphs
         keras.callbacks.TensorBoard(
             log_dir='./logs', update_freq=100, profile_batch='1,100000'
         ),
@@ -451,6 +348,7 @@ if __name__ == '__main__':
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
 
+
     """
     # Everything that creates variables should be under the strategy scope.
     # In general this is only model construction & `compile()`.
@@ -469,10 +367,10 @@ if __name__ == '__main__':
             print('running training')
             model.datagenerator = datagenerator
 
-            # if current_epoch == 0:
-            #     do_inference(model, None)
-            # else:
-            #     do_inference(model, current_epoch)
+            if current_epoch == 0:
+                do_inference(model, None)
+            else:
+                do_inference(model, current_epoch)
 
             run_training(model, current_epoch, epochs=10000)
         else:
