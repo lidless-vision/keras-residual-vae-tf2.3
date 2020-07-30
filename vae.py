@@ -280,7 +280,7 @@ def load_model(training=True):
         print("restoring from checkpoint: ", latest_checkpoint)
 
         # parse the filename to get the epoch number of the last checkpoint
-        current_epoch = str(latest_checkpoint).split('ckpt-')[1]
+        current_epoch = str(latest_checkpoint).split('checkpoint-')[1]
         current_epoch = int(current_epoch.split('.h5')[0])
 
         # load the weights from the checkpoint file
