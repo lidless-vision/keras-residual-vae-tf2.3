@@ -21,8 +21,6 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 
 # some resnet stuff from https://towardsdatascience.com/building-a-resnet-in-keras-e8f1322a49ba
 
-
-
 # NOTE: this version of keras or whatever (tensorflow==2.2.0) requires cuda==10.1
 
 # NOTE: this script seems to work fine on tensorflow 2.3.0, and also tf 2.4.0 which has some
@@ -59,6 +57,7 @@ dropout_rate = 0.2
 
 #here goes the path to the ms celeb dataset
 data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
+#data_path = '/media/cameron/angelas files/100faces'
 
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -320,7 +319,7 @@ def run_training(model, current_epoch, epochs=10000):
 
         # this is a new feature in tf 2.3 keras and it does essentially the same as the one below but in one line of code
         # but it only saves the most recent checkpoints so... lets try it out.
-        keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
+        #keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
 
         # This callback saves a SavedModel every epoch
         # We include the current epoch in the folder name.
