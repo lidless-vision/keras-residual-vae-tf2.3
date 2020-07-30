@@ -27,7 +27,6 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 #       cool features but also some bad memory leaks that made it unusable. #todo: post that version too
 
 
-from utilities import *
 import os
 
 import tensorflow as tf
@@ -56,8 +55,8 @@ target_size = (64, 64)  # image size in pixels
 dropout_rate = 0.2
 
 #here goes the path to the ms celeb dataset
-data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
-#data_path = '/media/cameron/angelas files/100faces'
+#data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
+data_path = '/media/cameron/angelas files/100faces'
 
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -74,6 +73,95 @@ if multi_gpu_training:
     # tf.config.experimental.set_memory_growth(gpus[2], True)
     # tf.config.experimental.set_memory_growth(gpus[3], True)
 
+
+def log(text):
+    #todo: make this write to a log file
+    if verbose:
+        print(text)
+
+
+def do_inference(model, epoch):
+
+    #todo: this is aweful
+
+    if epoch is None:
+        epoch = 'init'
+    else:
+        epoch = epoch + 1
+
+    datagenerator = model.datagenerator
+
+    if model.loaded == False:
+        #todo: test if this condition ever actually happens
+        log('do_inference recieved unloaded model')
+        model = load_model()
+    else:
+        log('got loaded model for inference')
+
+    log(type(model))
+
+    ## just in case this hasnt already been done
+    model.build(input_shape=(64, 64, 3))
+
+    #idk why
+    if epoch is None:
+        model.summary()
+
+    #get a batch of images from the datagenerator
+    images, labels = datagenerator.next()
+
+    ## make an array of input images
+    in_images =[]
+    i = 0
+    for item in images:
+
+        pil_img = tf.keras.preprocessing.image.array_to_img(item)
+        log(type(pil_img))
+
+        dir = 'ae_samples/'
+
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+
+        in_images.append(pil_img)
+        i = i + 1
+
+    ## do the inference on the inputs
+    result = model.predict(images, batch_size=batch_size)
+
+    ## make an array of output images
+    out_images = []
+    i = 0
+    for item in result:
+        img = item
+        img = img[:, :, 0:3] #/ 127.0
+
+        pil_img = tf.keras.preprocessing.image.array_to_img(img)
+        out_images.append(pil_img)
+        i = i + 1
+
+    #concatenate the two arays of images and add to list
+    a = 1
+    concatted = []
+    for item in zip(in_images, out_images):
+        #get_concat_h(item[0], item[1]).save(dir + '/ae_sample-' + str(a) + '.jpeg')
+        new_img = get_concat_h(item[0], item[1])
+        concatted.append(new_img)
+        a = a + 1
+
+    #concatenate images into rows 4 sets wide
+    rows = []
+    for i in range(0, len(concatted)-1, 4):
+        rows.append(concat_four_h(concatted[i], concatted[i+1], concatted[i+2], concatted[i+3]))
+
+    #concatenate the rows vertically t oform the final image
+    first_img = rows[0]
+    for i in range(1, len(rows)):
+        first_img = get_concat_v(first_img, rows[i])
+
+    #save the image to disk
+    first_img.save('ae_samples/epoch_' + str(epoch) + '.jpeg')
+    #return first_img
 
 ## Create the relu + BatchNormalization layer
 def relu_bn(inputs: Tensor) -> Tensor:
@@ -381,10 +469,10 @@ if __name__ == '__main__':
             print('running training')
             model.datagenerator = datagenerator
 
-            if current_epoch == 0:
-                do_inference(model, None)
-            else:
-                do_inference(model, current_epoch)
+            # if current_epoch == 0:
+            #     do_inference(model, None)
+            # else:
+            #     do_inference(model, current_epoch)
 
             run_training(model, current_epoch, epochs=10000)
         else:
