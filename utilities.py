@@ -1,5 +1,5 @@
 
-from autoencoder import *
+from vae import *
 from PIL import Image
 import pickle
 import numpy as np
@@ -80,7 +80,7 @@ def do_inference(model, epoch):
     datagenerator = model.datagenerator
 
     if model.loaded == False:
-        #todo: i dont think this condition ever happens
+        #todo: test if this condition ever actually happens
         log('do_inference recieved unloaded model')
         model = load_model()
     else:

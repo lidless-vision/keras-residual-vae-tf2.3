@@ -58,11 +58,11 @@ target_size = (64, 64)  # image size in pixels
 dropout_rate = 0.2
 
 #here goes the path to the ms celeb dataset
-data_path = '/media/user/nvme1/celeb-ms-cropped-aligned/'
+data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
 
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1";
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 
 
@@ -281,7 +281,7 @@ def load_model(training=True):
         print("restoring from checkpoint: ", latest_checkpoint)
 
         # parse the filename to get the epoch number of the last checkpoint
-        current_epoch = str(latest_checkpoint).split('checkpoint-')[1]
+        current_epoch = str(latest_checkpoint).split('ckpt-')[1]
         current_epoch = int(current_epoch.split('.h5')[0])
 
         # load the weights from the checkpoint file
@@ -317,11 +317,18 @@ def run_training(model, current_epoch, epochs=10000):
     print('steps per epoch = ' + str(steps_per_epoch))
 
     callbacks = [
+
+        # this is a new feature in tf 2.3 keras and it does essentially the same as the one below but in one line of code
+        # but it only saves the most recent checkpoints so... lets try it out.
+        keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
+
         # This callback saves a SavedModel every epoch
         # We include the current epoch in the folder name.
         keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_dir + "/checkpoint-{epoch}.h5", save_freq="epoch"
         ),
+
+        #this saves info to tensorboard so we can watch the graphs
         keras.callbacks.TensorBoard(
             log_dir='./logs', update_freq=100, profile_batch='1,100000'
         ),
