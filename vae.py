@@ -6,11 +6,37 @@ Last modified: 2020/04/29
 Description: Guide to multi-GPU & distributed training for Keras models.
 """
 
+
+
+
+
+
+#todo: This branch is the version which was modified to use the new tf.data functions where the model.fit() function is passed a dataset rather than a data_generator
+#       this is preferable so we dont have to wait 10 minutes for the datagenerator to scan the directories every time
+#       but unfortunately this strategy is rendered useless by an epic an longstanding bug
+#       https://github.com/tensorflow/tensorflow/issues/35030
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # some resnet stuff from https://towardsdatascience.com/building-a-resnet-in-keras-e8f1322a49ba
 # NOTE: this version of keras or whatever requires cuda==10.1
 
 
-from utilities import *
+from utilities import do_inference, get_datagenerator, load_dataset
 import os
 
 import tensorflow as tf
@@ -23,6 +49,7 @@ from tensorflow.keras.layers import Input, Add
 from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, AveragePooling2D, Flatten, Conv2DTranspose
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+import gc
 
 ## hyper parameters ?
 
@@ -44,7 +71,7 @@ dropout_rate = 0.2
 #data_path = '/home/cameron/PycharmProjects/keras-unbalanced-GANs/dataset/'
 #data_path = '/mnt/md0/datasets/100faces/'
 
-data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
+#data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
 #data_path = '/media/cameron/angelas files/100faces/'
 #data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
 data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
@@ -205,7 +232,7 @@ class VAE(keras.Model):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
-        self.datagenerator = None
+        self.dataset = None
         self.loaded = False
 
     def train_step(self, data):
@@ -213,6 +240,10 @@ class VAE(keras.Model):
         if isinstance(data, tuple):
             data = data[0]
         with tf.GradientTape() as tape:
+
+            #todo: this needs to be done in the build dataset part
+            data = data * (1/255)
+
             z_mean, z_log_var, z = self.encoder(data)
             reconstruction = self.decoder(z)
             reconstruction_loss = tf.reduce_mean(
@@ -225,6 +256,9 @@ class VAE(keras.Model):
             total_loss = reconstruction_loss + kl_loss
         grads = tape.gradient(total_loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+
+        gc.collect()
+
         return {
             "loss": total_loss,
             "reconstruction_loss": reconstruction_loss,
@@ -240,11 +274,7 @@ class VAE(keras.Model):
 
         return result
 
-class CustomCallback(keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs=None):
-        #keys = list(logs.keys())
-        print("End epoch {} generating samples... ".format(epoch + 1))
-        do_inference(self.model, epoch=epoch)
+
 
 
 def load_model(training=True):
@@ -253,6 +283,8 @@ def load_model(training=True):
 
     print('compliling model...')
     model = compile_model(latent_dim=latent_dim, training=training)
+
+    model.summary()
 
     print('trying to load pretrained weights from disk...')
     checkpoints = [checkpoint_dir + name for name in os.listdir(checkpoint_dir)]
@@ -289,13 +321,24 @@ def compile_model(latent_dim, training=True):
     model = VAE(encoder, decoder)
     optimizer = tf.keras.optimizers.Adam(LEARNING_RATE)
     model.compile(optimizer=optimizer)
+
+    model.build(input_shape=(None, 64, 64, 3))
+
     model.loaded = True
 
     return model
 
+class CustomCallback(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        #keys = list(logs.keys())
+        print("End epoch {} generating samples... ".format(epoch + 1))
+        do_inference(self.model, epoch=epoch, batch_size=batch_size)
+
+        gc.collect() # this makes python garbage collection happen, without it we run out of system ram after a few thousand batches
+
+
 def run_training(model, current_epoch, epochs=10000):
 
-    log(type(model))
     print('steps per epoch = ' + str(steps_per_epoch))
 
     callbacks = [
@@ -313,8 +356,8 @@ def run_training(model, current_epoch, epochs=10000):
 
     print('starting training from epoch ' + str(current_epoch))
 
-    model.fit_generator(
-        datagenerator, verbose=1,
+    model.fit(
+        dataset, verbose=1,
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         callbacks=callbacks,
@@ -333,6 +376,8 @@ def get_datagenerator(path):
     return train_generator
 
 
+
+
 if __name__ == '__main__':
 
     # Prepare a directory to store all the checkpoints.
@@ -348,29 +393,24 @@ if __name__ == '__main__':
 
     with strategy.scope():
 
-
-        print('loading dataset ')
-        datagenerator = load_dataset(data_path)
-
-        #print('starting the datagenerator')
+        print('starting datagen')
         #datagenerator = get_datagenerator(data_path)
 
+        dataset = load_dataset(data_path, batch_size=batch_size)
 
         model, current_epoch = load_model(training=TRAINING)
+        model.dataset = dataset
 
         if TRAINING == True:
             print('running training')
-            model.datagenerator = datagenerator
-
             if current_epoch == 0:
-                do_inference(model, None)
+                do_inference(model, None, batch_size=batch_size)
             else:
-                do_inference(model, current_epoch)
+                do_inference(model, current_epoch, batch_size=batch_size)
 
             run_training(model, current_epoch, epochs=10000)
         else:
             print("just doing inference")
-            model.datagenerator = datagenerator
-            model = do_inference(model, epoch=None)
+            model = do_inference(model, epoch=None, batch_size=batch_size)
 
 
