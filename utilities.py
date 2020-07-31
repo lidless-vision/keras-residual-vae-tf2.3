@@ -1,5 +1,5 @@
 
-from vae import *
+
 from PIL import Image
 import pickle
 import numpy as np
@@ -11,9 +11,9 @@ import pickle
 from tensorflow import Tensor
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.layers import Input, Add
+import os
 
-
-
+verbose = False
 
 def load_dataset(save_path):
     # load the dataset
@@ -82,7 +82,7 @@ def load_dataset(save_path):
     return loaded_dataset
 
 
-def do_inference(model, epoch):
+def do_inference(model, epoch, batch_size):
 
     #todo: this is aweful
 
@@ -96,7 +96,7 @@ def do_inference(model, epoch):
     if model.loaded == False:
         #todo: i dont think this condition ever happens
         log('do_inference recieved unloaded model')
-        model = load_model()
+        # model = load_model()
     else:
         log('got loaded model for inference')
 
@@ -166,6 +166,6 @@ def do_inference(model, epoch):
     #return first_img
 
 
-if __name__ == '__main__':
-    data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
-    dataset = load_dataset(data_path)
+# if __name__ == '__main__':
+#     data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
+#     dataset = load_dataset(data_path)

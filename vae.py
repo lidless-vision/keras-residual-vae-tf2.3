@@ -10,7 +10,6 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 # NOTE: this version of keras or whatever requires cuda==10.1
 
 
-from utilities import *
 import os
 
 import tensorflow as tf
@@ -23,6 +22,9 @@ from tensorflow.keras.layers import Input, Add
 from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, AveragePooling2D, Flatten, Conv2DTranspose
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+from utilities import do_inference
+
+import gc
 
 ## hyper parameters ?
 
@@ -47,7 +49,7 @@ dropout_rate = 0.2
 data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
 #data_path = '/media/cameron/angelas files/100faces/'
 #data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
-data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
+#data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1";
@@ -244,7 +246,10 @@ class CustomCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         #keys = list(logs.keys())
         print("End epoch {} generating samples... ".format(epoch + 1))
-        do_inference(self.model, epoch=epoch)
+        do_inference(self.model, epoch=epoch, batch_size=batch_size)
+
+        #supposedly this will fix the memoryleak (https://github.com/tensorflow/tensorflow/issues/35030)
+        gc.collect()
 
 
 def load_model(training=True):
@@ -289,13 +294,15 @@ def compile_model(latent_dim, training=True):
     model = VAE(encoder, decoder)
     optimizer = tf.keras.optimizers.Adam(LEARNING_RATE)
     model.compile(optimizer=optimizer)
+
+    model.build(input_shape=(None, 64, 64, 3))
     model.loaded = True
 
     return model
 
 def run_training(model, current_epoch, epochs=10000):
 
-    log(type(model))
+    #log(type(model))
     print('steps per epoch = ' + str(steps_per_epoch))
 
     callbacks = [
@@ -349,11 +356,12 @@ if __name__ == '__main__':
     with strategy.scope():
 
 
-        print('loading dataset ')
-        datagenerator = load_dataset(data_path)
+        #print('loading dataset ')
+        #datagenerator = load_dataset(data_path)
 
-        #print('starting the datagenerator')
-        #datagenerator = get_datagenerator(data_path)
+        print('starting the datagenerator')
+
+        datagenerator = get_datagenerator(data_path)
 
 
         model, current_epoch = load_model(training=TRAINING)
@@ -363,14 +371,14 @@ if __name__ == '__main__':
             model.datagenerator = datagenerator
 
             if current_epoch == 0:
-                do_inference(model, None)
+                do_inference(model, None, batch_size=batch_size)
             else:
-                do_inference(model, current_epoch)
+                do_inference(model, current_epoch, batch_size=batch_size)
 
             run_training(model, current_epoch, epochs=10000)
         else:
             print("just doing inference")
             model.datagenerator = datagenerator
-            model = do_inference(model, epoch=None)
+            model = do_inference(model, epoch=None, batch_size=batch_size)
 
 
