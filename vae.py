@@ -30,7 +30,7 @@ TRAINING = True
 verbose = False
 
 LEARNING_RATE = 0.00001
-steps_per_epoch = 200
+steps_per_epoch = 1000
 
 latent_dim = 8
 batch_size = 64
@@ -46,13 +46,11 @@ dropout_rate = 0.2
 
 data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
 #data_path = '/media/cameron/angelas files/100faces/'
-
 #data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
-
+data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1";
-
 
 
 # if you have only 1 GPU just comment this out:
@@ -211,14 +209,10 @@ class VAE(keras.Model):
         self.loaded = False
 
     def train_step(self, data):
-        log('train step')
 
-        log(type(data))
         if isinstance(data, tuple):
             data = data[0]
         with tf.GradientTape() as tape:
-            log(type(data))
-            log(data.shape)
             z_mean, z_log_var, z = self.encoder(data)
             reconstruction = self.decoder(z)
             reconstruction_loss = tf.reduce_mean(
@@ -263,15 +257,13 @@ def load_model(training=True):
     print('trying to load pretrained weights from disk...')
     checkpoints = [checkpoint_dir + name for name in os.listdir(checkpoint_dir)]
 
-    log(checkpoints)
-
     if checkpoints != []:
         latest_checkpoint = max(checkpoints, key=os.path.getctime)
 
         print("restoring from checkpoint: ", latest_checkpoint)
 
         # parse the filename to get the epoch number of the last checkpoint
-        current_epoch = str(latest_checkpoint).split('ckpt-')[1]
+        current_epoch = str(latest_checkpoint).split('cpkt-')[1]
         current_epoch = int(current_epoch.split('.h5')[0])
 
         # load the weights from the checkpoint file
@@ -320,7 +312,6 @@ def run_training(model, current_epoch, epochs=10000):
     ]
 
     print('starting training from epoch ' + str(current_epoch))
-    log(type(model))
 
     model.fit_generator(
         datagenerator, verbose=1,
@@ -336,7 +327,7 @@ def get_datagenerator(path):
         # note: the folder has to have folders of images, these are the class labels
         #       but this model ignores class labels
     datagen = ImageDataGenerator(rescale=1.0/255.0)
-    train_generator = datagen.flow_from_directory(path, batch_size=batch_size, shuffle=False,
+    train_generator = datagen.flow_from_directory(path, batch_size=batch_size, shuffle=True,
                                                   class_mode='input', color_mode="rgb"
                                                   , target_size=(64, 64))
     return train_generator
@@ -348,7 +339,6 @@ if __name__ == '__main__':
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
 
-
     """
     # Everything that creates variables should be under the strategy scope.
     # In general this is only model construction & `compile()`.
@@ -358,8 +348,13 @@ if __name__ == '__main__':
 
     with strategy.scope():
 
-        print('starting the datagenerator')
-        datagenerator = get_datagenerator(data_path)
+
+        print('loading dataset ')
+        datagenerator = load_dataset(data_path)
+
+        #print('starting the datagenerator')
+        #datagenerator = get_datagenerator(data_path)
+
 
         model, current_epoch = load_model(training=TRAINING)
 

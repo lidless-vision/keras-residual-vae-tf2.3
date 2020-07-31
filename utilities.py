@@ -63,9 +63,23 @@ def get_concat_v(im1, im2):
 
 def log(text):
     #todo: make this write to a log file
-    if verbose:
+    if verbose: #todo: pycharm doesnt like this
         print(text)
 
+def load_dataset(save_path):
+    print('loading tensor_spec from pkl file')
+    tensor_spec = pickle.load(open(save_path + "tensor_spec.pkl", "rb"))
+
+    print('loading dataset from files.')
+    loaded_dataset = tf.data.experimental.load(path=save_path, element_spec=tensor_spec, )
+    # loaded_dataset = tf.data.experimental.load(path=save_path, compression='GZIP', element_spec=tensor_spec)
+
+    print('caching dataset to file ')
+    loaded_dataset = loaded_dataset.cache(save_path + 'cache_file.tf')
+
+    tf.data.Dataset
+
+    return loaded_dataset
 
 
 def do_inference(model, epoch):
@@ -150,3 +164,8 @@ def do_inference(model, epoch):
     #save the image to disk
     first_img.save('ae_samples/epoch_' + str(epoch) + '.jpeg')
     #return first_img
+
+
+if __name__ == '__main__':
+    data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
+    dataset = load_dataset(data_path)
