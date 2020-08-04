@@ -1,5 +1,5 @@
 
-from vae import *
+
 from PIL import Image
 import pickle
 import numpy as np
@@ -11,9 +11,9 @@ import pickle
 from tensorflow import Tensor
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.layers import Input, Add
+import os
 
 verbose = False
-
 
 def load_dataset(save_path):
     # load the dataset
@@ -29,7 +29,6 @@ def load_dataset(save_path):
     # loaded_dataset = loaded_dataset.cache(save_path + 'cache_file.tf')
 
     print('loaded dataset')
-    print(type(loaded_dataset))
 
     return loaded_dataset
 
@@ -63,14 +62,13 @@ def get_concat_v(im1, im2):
 
 def log(text):
     #todo: make this write to a log file
-    if verbose:
+    if verbose: #todo: pycharm doesnt like this
         print(text)
 
 
+def do_inference(model, epoch, batch_size):
 
-def do_inference(model, epoch):
-
-    #todo: this is aweful
+    #todo: this whole function is aweful
 
     if epoch is None:
         epoch = 'init'
@@ -80,9 +78,9 @@ def do_inference(model, epoch):
     datagenerator = model.datagenerator
 
     if model.loaded == False:
-        #todo: test if this condition ever actually happens
+        #todo: i dont think this condition ever happens
         log('do_inference recieved unloaded model')
-        model = load_model()
+        # model = load_model()
     else:
         log('got loaded model for inference')
 
@@ -150,3 +148,4 @@ def do_inference(model, epoch):
     #save the image to disk
     first_img.save('ae_samples/epoch_' + str(epoch) + '.jpeg')
     #return first_img
+

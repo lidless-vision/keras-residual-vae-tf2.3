@@ -2,7 +2,7 @@ import tensorflow as tf
 import pickle
 
 """
-this is actually for the Tensorflow 2.4.0 version
+this is actually for the Tensorflow 2.3.0 version ??
 """
 
 directory = '/mnt/md0/datasets/celeb-ms-cropped-aligned'
