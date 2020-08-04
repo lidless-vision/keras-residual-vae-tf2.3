@@ -29,9 +29,6 @@ import gc
 # hyper parameters ?
 
 
-
-
-
 TRAINING = True
 verbose = False
 
