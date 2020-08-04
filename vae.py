@@ -11,9 +11,12 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 
 
 
-#todo: This branch is the version which was modified to use the new tf.data functions where the model.fit() function is passed a dataset rather than a data_generator
-#       this is preferable so we dont have to wait 10 minutes for the datagenerator to scan the directories every time
-#       but unfortunately this strategy is rendered useless by an epic an longstanding bug
+#todo: This branch is the version which was modified to use the new tf.data
+# functions where the model.fit() function is passed a dataset rather than a data_generator
+#       this is preferable so we dont have to wait 10 minutes for
+#       the datagenerator to scan the directories every time
+#       we are implementing an amazing workaround where we just restart this whole program
+#       in order to avoid the memory leak
 #       https://github.com/tensorflow/tensorflow/issues/35030
 
 
