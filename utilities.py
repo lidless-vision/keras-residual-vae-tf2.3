@@ -1,5 +1,5 @@
 
-
+from vae import *
 from PIL import Image
 import pickle
 import numpy as np
@@ -29,6 +29,7 @@ def load_dataset(save_path):
     # loaded_dataset = loaded_dataset.cache(save_path + 'cache_file.tf')
 
     print('loaded dataset')
+    print(type(loaded_dataset))
 
     return loaded_dataset
 
@@ -65,17 +66,33 @@ def log(text):
     if verbose: #todo: pycharm doesnt like this
         print(text)
 
+def load_dataset(save_path, batch_size):
+    print('loading tensor_spec from pkl file')
+    tensor_spec = pickle.load(open(save_path + "tensor_spec.pkl", "rb"))
 
-def do_inference(model, epoch, batch_size):
+    print('loading dataset from files.')
+    loaded_dataset = tf.data.experimental.load(path=save_path, element_spec=tensor_spec, )
+    # loaded_dataset = tf.data.experimental.load(path=save_path, compression='GZIP', element_spec=tensor_spec)
 
-    #todo: this whole function is aweful
+    print('unbatching loaded dataset')
+    loaded_dataset = loaded_dataset.unbatch()
+    print('batching dataset')
+    loaded_dataset = loaded_dataset.batch(batch_size)
+
+    # print('caching dataset to file ')
+    # loaded_dataset = loaded_dataset.cache(save_path + 'cache_file.tf')
+
+    return loaded_dataset
+
+
+def do_inference(model, epoch, batch_size=64):
+
+    #todo: this is aweful
 
     if epoch is None:
         epoch = 'init'
     else:
         epoch = epoch + 1
-
-    datagenerator = model.datagenerator
 
     if model.loaded == False:
         #todo: i dont think this condition ever happens
@@ -93,14 +110,24 @@ def do_inference(model, epoch, batch_size):
     if epoch is None:
         model.summary()
 
-    #get a batch of images from the datagenerator
-    images, labels = datagenerator.next()
+    #get 1 batch of images from the datagenerator
+    batch = model.dataset.take(1)
+    batch = list(batch.as_numpy_iterator())
+
+    batch = batch[0][0] # remove both extra dimensions
+    print(batch.shape)
+
+    # in this little one-liner we unzip the tuples of images and their labels and discard the labels
+    #batch = list(zip(*batch))[0]
+
+    #print(batch.shape)
 
     ## make an array of input images
     in_images =[]
     i = 0
-    for item in images:
 
+    # make list of input images in PIL format
+    for item in batch:
         pil_img = tf.keras.preprocessing.image.array_to_img(item)
         log(type(pil_img))
 
@@ -112,16 +139,18 @@ def do_inference(model, epoch, batch_size):
         in_images.append(pil_img)
         i = i + 1
 
+    #scale the images for the neural net since the dataset hasnt done that
+    batch = batch * (1/ 255)
+
     ## do the inference on the inputs
-    result = model.predict(images, batch_size=batch_size)
+    result = model.predict(batch, batch_size=batch_size)
 
     ## make an array of output images
     out_images = []
     i = 0
     for item in result:
         img = item
-        img = img[:, :, 0:3] #/ 127.0
-
+        img = img[:, :, 0:3]
         pil_img = tf.keras.preprocessing.image.array_to_img(img)
         out_images.append(pil_img)
         i = i + 1
@@ -149,3 +178,7 @@ def do_inference(model, epoch, batch_size):
     first_img.save('ae_samples/epoch_' + str(epoch) + '.jpeg')
     #return first_img
 
+
+if __name__ == '__main__':
+    data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
+    dataset = load_dataset(data_path)

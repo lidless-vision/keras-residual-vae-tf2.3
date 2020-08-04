@@ -1,10 +1,4 @@
 """
-
-This script was inspired mostly from code in the keras and tensorflow documentation.
-the original header is still preserved below, i think ive documented all the code i copied in the comments
-Last modified: August 3rd, 2020
-
-
 Title: Multi-GPU and distributed training
 Author: [fchollet](https://twitter.com/fchollet)
 Date created: 2020/04/28
@@ -12,10 +6,37 @@ Last modified: 2020/04/29
 Description: Guide to multi-GPU & distributed training for Keras models.
 """
 
+
+
+
+
+
+#todo: This branch is the version which was modified to use the new tf.data functions where the model.fit() function is passed a dataset rather than a data_generator
+#       this is preferable so we dont have to wait 10 minutes for the datagenerator to scan the directories every time
+#       but unfortunately this strategy is rendered useless by an epic an longstanding bug
+#       https://github.com/tensorflow/tensorflow/issues/35030
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # some resnet stuff from https://towardsdatascience.com/building-a-resnet-in-keras-e8f1322a49ba
 # NOTE: this version of keras or whatever requires cuda==10.1
 
 
+from utilities import do_inference, get_datagenerator, load_dataset
 import os
 
 import tensorflow as tf
@@ -28,7 +49,6 @@ from tensorflow.keras.layers import Input, Add
 from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, AveragePooling2D, Flatten, Conv2DTranspose
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-from utilities import do_inference
 
 import gc
 
@@ -50,13 +70,21 @@ checkpoint_dir = "./ae_checkpoints/"
 target_size = (64, 64)  # image size in pixels
 dropout_rate = 0.2
 
+#data_path = '/mnt/md0/datasets/gw/'
+#data_path = '/home/cameron/PycharmProjects/keras-unbalanced-GANs/dataset/'
+#data_path = '/mnt/md0/datasets/100faces/'
+
 data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
+#data_path = '/media/cameron/angelas files/100faces/'
+#data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
+data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1";
 
 # if you are using only 1 GPU, comment out this whole block:
 multi_gpu_training = False
+
 if multi_gpu_training:
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(gpus[0], True)
@@ -238,13 +266,17 @@ class VAE(keras.Model):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
-        self.datagenerator = None
+        self.dataset = None
         self.loaded = False
 
     def train_step(self, data):
         if isinstance(data, tuple):
             data = data[0]
         with tf.GradientTape() as tape:
+
+            #todo: this needs to be done in the build dataset part
+            data = data * (1/255)
+
             z_mean, z_log_var, z = self.encoder(data)
             reconstruction = self.decoder(z)
             reconstruction_loss = tf.reduce_mean(
@@ -257,10 +289,6 @@ class VAE(keras.Model):
             total_loss = reconstruction_loss + kl_loss
         grads = tape.gradient(total_loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
-
-        del data, grads
-        gc.collect()  # supposedly this will fix the memoryleak (https://github.com/tensorflow/tensorflow/issues/35030)
-
         return {
             "loss": total_loss,
             "reconstruction_loss": reconstruction_loss,
@@ -273,7 +301,6 @@ class VAE(keras.Model):
         latents = self.encoder(inputs)
         result = self.decoder(latents[0])
 
-        gc.collect()  # supposedly this will fix the memoryleak (https://github.com/tensorflow/tensorflow/issues/35030)
         return result
 
 
@@ -341,6 +368,7 @@ def compile_model(latent_dim, training=True):
     model.compile(optimizer=optimizer)
 
     model.build(input_shape=(None, 64, 64, 3))
+
     model.loaded = True
 
     return model
@@ -366,20 +394,19 @@ def run_training(model, current_epoch, epochs=10000):
     print('starting training from epoch ' + str(current_epoch))
 
     model.fit(
-        datagenerator, verbose=1,
+        dataset, verbose=1,
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         callbacks=callbacks,
         initial_epoch=current_epoch, batch_size=batch_size
     )
 
-
 def get_datagenerator(path):
-    # create a data generator
+        # create a data generator
 
-    # note: the folder has to have folders of images, these are the class labels
-    #       but this model ignores class labels
-    datagen = ImageDataGenerator(rescale=1.0 / 255.0)
+        # note: the folder has to have folders of images, these are the class labels
+        #       but this model ignores class labels
+    datagen = ImageDataGenerator(rescale=1.0/255.0)
     train_generator = datagen.flow_from_directory(path, batch_size=batch_size, shuffle=True,
                                                   class_mode='input', color_mode="rgb"
                                                   , target_size=(64, 64))
@@ -407,8 +434,13 @@ if __name__ == '__main__':
         print('starting the datagenerator')
 
         datagenerator = get_datagenerator(data_path)
+        print('starting datagen')
+        #datagenerator = get_datagenerator(data_path)
+
+        dataset = load_dataset(data_path, batch_size=batch_size)
 
         model, current_epoch = load_model(training=TRAINING)
+        model.dataset = dataset
 
         if TRAINING == True:
             print('running training')
