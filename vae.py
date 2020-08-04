@@ -32,8 +32,6 @@ from utilities import do_inference
 
 import gc
 
-# hyper parameters ?
-
 
 TRAINING = True
 verbose = False
