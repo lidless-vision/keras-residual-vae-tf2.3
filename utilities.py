@@ -68,7 +68,7 @@ def log(text):
 
 def do_inference(model, epoch, batch_size):
 
-    #todo: this is aweful
+    #todo: this whole function is aweful
 
     if epoch is None:
         epoch = 'init'
@@ -149,7 +149,3 @@ def do_inference(model, epoch, batch_size):
     first_img.save('ae_samples/epoch_' + str(epoch) + '.jpeg')
     #return first_img
 
-
-# if __name__ == '__main__':
-#     data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
-#     dataset = load_dataset(data_path)

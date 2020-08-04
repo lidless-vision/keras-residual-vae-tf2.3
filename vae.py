@@ -26,12 +26,19 @@ from utilities import do_inference
 
 import gc
 
-## hyper parameters ?
+# hyper parameters ?
+
+
+
+
 
 TRAINING = True
 verbose = False
 
-LEARNING_RATE = 0.00001
+#note: with this run  we did LEARNING_RATE = 0.00001 and steps_per_epoch = 1000 for 1200 "epochs"
+#   then we added another 0 to the learning rate, which i think is what we're supposed to do.
+
+LEARNING_RATE = 0.000001
 steps_per_epoch = 1000
 
 latent_dim = 8
@@ -42,18 +49,19 @@ checkpoint_dir = "./ae_checkpoints/"
 target_size = (64, 64)  # image size in pixels
 dropout_rate = 0.2
 
-#data_path = '/mnt/md0/datasets/gw/'
-#data_path = '/home/cameron/PycharmProjects/keras-unbalanced-GANs/dataset/'
-#data_path = '/mnt/md0/datasets/100faces/'
+global epochs_since_restart  # this is to fix our super cool keras memory leak
+epochs_since_restart = 0
+how_many_epochs_before_restart = 30
+
+# data_path = '/mnt/md0/datasets/gw/'
 
 data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
-#data_path = '/media/cameron/angelas files/100faces/'
-#data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
-#data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
+# data_path = '/media/cameron/angelas files/100faces/'
+# data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
+# data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1";
-
 
 # if you have only 1 GPU just comment this out:
 multi_gpu_training = False
@@ -66,11 +74,24 @@ if multi_gpu_training:
     # tf.config.experimental.set_memory_growth(gpus[3], True)
 
 
+def restart():
+    # stolen from plieningerweb
+    # https://gist.github.com/plieningerweb/39e47584337a516f56da105365a2e4c6
+    import sys
+    print("argv was", sys.argv)
+    print("sys.executable was", sys.executable)
+    print("restart now")
+
+    import os
+    os.execv(sys.executable, ['python'] + sys.argv)
+
+
 ## Create the relu + BatchNormalization layer
 def relu_bn(inputs: Tensor) -> Tensor:
     relu = ReLU()(inputs)
     bn = BatchNormalization()(relu)
     return bn
+
 
 ## Create a sampling layer
 class Sampling(layers.Layer):
@@ -83,6 +104,7 @@ class Sampling(layers.Layer):
         epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
         return z_mean + tf.exp(0.5 * z_log_var) * epsilon
 
+
 ## Create a residual_block for the encoder and also for the descriminator
 def residual_block(x: Tensor, downsample: bool, filters: int, kernel_size: int = 3) -> Tensor:
     """
@@ -92,7 +114,7 @@ def residual_block(x: Tensor, downsample: bool, filters: int, kernel_size: int =
     note 2: using the "same" padding is apparently a problem (https://stackoverflow.com/questions/54643064/how-to-improve-the-accuracy-of-autoencoder)
     note:3 this network eventually got the exploding gradient problem and it was solved by lowering the learning rate
     """
-    #log('residual_block')
+    # log('residual_block')
 
     y = layers.Dropout(dropout_rate)(x)
     y = Conv2D(kernel_size=kernel_size,
@@ -116,7 +138,8 @@ def residual_block(x: Tensor, downsample: bool, filters: int, kernel_size: int =
     out = relu_bn(out)
     return out
 
-#Create a transposed residual block for the generator/decoder
+
+# Create a transposed residual block for the generator/decoder
 def residual_block_transpose(x: Tensor, upsample: bool, filters: int, kernel_size: int = 3) -> Tensor:
     """
     this is the upsampling (transposed) residual block, used by the part known as the decoder/generator
@@ -124,28 +147,29 @@ def residual_block_transpose(x: Tensor, upsample: bool, filters: int, kernel_siz
 
     y = layers.Dropout(dropout_rate)(x)
     y = Conv2DTranspose(kernel_size=kernel_size,
-               strides=(1 if not upsample else 2),
-               filters=filters,
-               padding='same')(y)
+                        strides=(1 if not upsample else 2),
+                        filters=filters,
+                        padding='same')(y)
 
     y = relu_bn(y)
     y = layers.Dropout(dropout_rate)(y)
     y = Conv2DTranspose(kernel_size=kernel_size,
-               strides=1,
-               filters=filters,
-               padding='same')(y)
+                        strides=1,
+                        filters=filters,
+                        padding='same')(y)
 
     if upsample:
         x = layers.Dropout(dropout_rate)(x)
         x = Conv2DTranspose(kernel_size=2,
-                   strides=2,
-                   filters=filters)(x)
+                            strides=2,
+                            filters=filters)(x)
 
     out = Add()([x, y])
     out = relu_bn(out)
     return out
 
-def get_encoder(latent_dim,num_filters, training=True):
+
+def get_encoder(latent_dim, num_filters, training=True):
     """sets up the encoder model"""
     encoder_inputs = Input(shape=(64, 64, 3))
 
@@ -167,8 +191,8 @@ def get_encoder(latent_dim,num_filters, training=True):
         for j in range(num_blocks):
             x = residual_block(x, downsample=(j == 0 and i != 0), filters=num_filters)
         num_filters /= 2  # its important that the encoders params get smaller because its
-                            # an autoencoder, so we divide here instead of multiplying like in
-                             # the discriminator
+        # an autoencoder, so we divide here instead of multiplying like in
+        # the discriminator
     x = layers.Flatten()(x)
     x = layers.Dense(32, activation="relu")(x)
     z_mean = layers.Dense(latent_dim, name="z_mean")(x)
@@ -178,6 +202,7 @@ def get_encoder(latent_dim,num_filters, training=True):
     encoder.summary()
 
     return encoder
+
 
 def get_decoder(latent_dim, num_filters):
     """sets up the decoder model"""
@@ -194,13 +219,14 @@ def get_decoder(latent_dim, num_filters):
         num_filters *= 2
 
     x = residual_block_transpose(x, upsample=(True), filters=num_filters)
-    #x = residual_block_transpose(x, upsample=(True), filters=num_filters)
+    # x = residual_block_transpose(x, upsample=(True), filters=num_filters)
 
     decoder_outputs = layers.Conv2DTranspose(3, 3, activation="sigmoid", padding="same")(x)
     decoder = keras.Model(latent_inputs, decoder_outputs, name="decoder")
     decoder.summary()
 
     return decoder
+
 
 class VAE(keras.Model):
     def __init__(self, encoder, decoder, **kwargs):
@@ -211,7 +237,6 @@ class VAE(keras.Model):
         self.loaded = False
 
     def train_step(self, data):
-
         if isinstance(data, tuple):
             data = data[0]
         with tf.GradientTape() as tape:
@@ -227,6 +252,10 @@ class VAE(keras.Model):
             total_loss = reconstruction_loss + kl_loss
         grads = tape.gradient(total_loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+
+        del data, grads
+        gc.collect()  # supposedly this will fix the memoryleak (https://github.com/tensorflow/tensorflow/issues/35030)
+
         return {
             "loss": total_loss,
             "reconstruction_loss": reconstruction_loss,
@@ -234,22 +263,30 @@ class VAE(keras.Model):
         }
 
     def call(self, inputs, training=True):
-
-        #todo: this doesnt seem right, but yet it still works.
+        # todo: this doesnt seem right, but yet it still works.
 
         latents = self.encoder(inputs)
         result = self.decoder(latents[0])
 
+        gc.collect()  # supposedly this will fix the memoryleak (https://github.com/tensorflow/tensorflow/issues/35030)
         return result
+
 
 class CustomCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
-        #keys = list(logs.keys())
         print("End epoch {} generating samples... ".format(epoch + 1))
         do_inference(self.model, epoch=epoch, batch_size=batch_size)
 
-        #supposedly this will fix the memoryleak (https://github.com/tensorflow/tensorflow/issues/35030)
-        gc.collect()
+        global epochs_since_restart
+        epochs_since_restart += 1
+
+        print('epochs since last restart: ' + str(epochs_since_restart))
+
+        if epochs_since_restart == how_many_epochs_before_restart:
+            restart()
+            exit()
+
+        gc.collect()  # supposedly this will fix the memoryleak (https://github.com/tensorflow/tensorflow/issues/35030)
 
 
 def load_model(training=True):
@@ -282,8 +319,8 @@ def load_model(training=True):
 
     return model, current_epoch
 
-def compile_model(latent_dim, training=True):
 
+def compile_model(latent_dim, training=True):
     ## Build the encoder
     encoder = get_encoder(latent_dim=latent_dim, training=training, num_filters=128)
 
@@ -300,15 +337,15 @@ def compile_model(latent_dim, training=True):
 
     return model
 
-def run_training(model, current_epoch, epochs=10000):
 
-    #log(type(model))
+def run_training(model, current_epoch, epochs=10000):
+    # log(type(model))
     print('steps per epoch = ' + str(steps_per_epoch))
 
     callbacks = [
         # This callback saves a SavedModel every epoch
         # We include the current epoch in the folder name.
-        #keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
+        # keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
         keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_dir + "/cpkt-{epoch}.h5", save_freq="epoch"
         ),
@@ -320,20 +357,21 @@ def run_training(model, current_epoch, epochs=10000):
 
     print('starting training from epoch ' + str(current_epoch))
 
-    model.fit_generator(
+    model.fit(
         datagenerator, verbose=1,
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         callbacks=callbacks,
-        initial_epoch=current_epoch
+        initial_epoch=current_epoch, batch_size=batch_size
     )
 
-def get_datagenerator(path):
-        # create a data generator
 
-        # note: the folder has to have folders of images, these are the class labels
-        #       but this model ignores class labels
-    datagen = ImageDataGenerator(rescale=1.0/255.0)
+def get_datagenerator(path):
+    # create a data generator
+
+    # note: the folder has to have folders of images, these are the class labels
+    #       but this model ignores class labels
+    datagen = ImageDataGenerator(rescale=1.0 / 255.0)
     train_generator = datagen.flow_from_directory(path, batch_size=batch_size, shuffle=True,
                                                   class_mode='input', color_mode="rgb"
                                                   , target_size=(64, 64))
@@ -355,14 +393,12 @@ if __name__ == '__main__':
 
     with strategy.scope():
 
-
-        #print('loading dataset ')
-        #datagenerator = load_dataset(data_path)
+        # print('loading dataset ')
+        # datagenerator = load_dataset(data_path)
 
         print('starting the datagenerator')
 
         datagenerator = get_datagenerator(data_path)
-
 
         model, current_epoch = load_model(training=TRAINING)
 
@@ -380,5 +416,3 @@ if __name__ == '__main__':
             print("just doing inference")
             model.datagenerator = datagenerator
             model = do_inference(model, epoch=None, batch_size=batch_size)
-
-
