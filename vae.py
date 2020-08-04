@@ -68,6 +68,7 @@ if multi_gpu_training:
 # this is to fix our super cool keras memory leak
 global epochs_since_restart
 global how_many_epochs_before_restart
+
 epochs_since_restart = 0
 how_many_epochs_before_restart = 30
 
@@ -284,7 +285,10 @@ class CustomCallback(keras.callbacks.Callback):
         global epochs_since_restart
         epochs_since_restart += 1
 
-        print('epochs since last restart: ' + str(epochs_since_restart))
+        print(
+                'epochs since last restart: ' + str(epochs_since_restart) +
+                ' epochs remaining until next restart: ' + str(how_many_epochs_before_restart)
+              )
 
         if epochs_since_restart == how_many_epochs_before_restart:
             restart()
