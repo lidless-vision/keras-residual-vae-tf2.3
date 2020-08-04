@@ -1,4 +1,10 @@
 """
+
+This script was inspired mostly from code in the keras and tensorflow documentation.
+the original header is still preserved below, i think ive documented all the code i copied in the comments
+Last modified: August 3rd, 2020
+
+
 Title: Multi-GPU and distributed training
 Author: [fchollet](https://twitter.com/fchollet)
 Date created: 2020/04/28
@@ -46,23 +52,13 @@ checkpoint_dir = "./ae_checkpoints/"
 target_size = (64, 64)  # image size in pixels
 dropout_rate = 0.2
 
-global epochs_since_restart  # this is to fix our super cool keras memory leak
-epochs_since_restart = 0
-how_many_epochs_before_restart = 30
-
-# data_path = '/mnt/md0/datasets/gw/'
-
 data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
-# data_path = '/media/cameron/angelas files/100faces/'
-# data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
-# data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1";
 
-# if you have only 1 GPU just comment this out:
+# if you are using only 1 GPU, comment out this whole block:
 multi_gpu_training = False
-
 if multi_gpu_training:
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(gpus[0], True)
@@ -71,9 +67,22 @@ if multi_gpu_training:
     # tf.config.experimental.set_memory_growth(gpus[3], True)
 
 
+# this is to fix our super cool keras memory leak
+global epochs_since_restart
+global how_many_epochs_before_restart
+epochs_since_restart = 0
+how_many_epochs_before_restart = 30
+
+
 def restart():
-    # stolen from plieningerweb
+    """
+    # written by: plieningerweb
     # https://gist.github.com/plieningerweb/39e47584337a516f56da105365a2e4c6
+
+    we use this function to restart this entire script after a specified number of "epochs"
+    because there is a memoryleak somwhere in tf2/keras.
+    tensorflow==2.2.0 seems to leak less when using keras data_generators
+    """
     import sys
     print("argv was", sys.argv)
     print("sys.executable was", sys.executable)
@@ -271,7 +280,7 @@ class VAE(keras.Model):
 
 class CustomCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
-        print("End epoch {} generating samples... ".format(epoch + 1))
+        print("End epoch {} generating samples... \n".format(epoch + 1))
         do_inference(self.model, epoch=epoch, batch_size=batch_size)
 
         global epochs_since_restart
