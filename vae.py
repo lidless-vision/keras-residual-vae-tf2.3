@@ -19,6 +19,8 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 #       in order to avoid the memory leak
 #       https://github.com/tensorflow/tensorflow/issues/35030
 
+#todo: just kidding, this uses up the enirety of my ram before even one epoch finishes
+
 
 
 
@@ -62,8 +64,8 @@ verbose = False
 #note: with this run  we did LEARNING_RATE = 0.00001 and steps_per_epoch = 1000 for 1200 "epochs"
 #   then we added another 0 to the learning rate, which i think is what we're supposed to do.
 
-LEARNING_RATE = 0.000001
-steps_per_epoch = 1000
+LEARNING_RATE = 0.00001
+steps_per_epoch = 100
 
 latent_dim = 8
 batch_size = 64
@@ -77,7 +79,7 @@ dropout_rate = 0.2
 #data_path = '/home/cameron/PycharmProjects/keras-unbalanced-GANs/dataset/'
 #data_path = '/mnt/md0/datasets/100faces/'
 
-data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
+#data_path = '/media/cameron/angelas files/celeb-ms-cropped-aligned/'
 #data_path = '/media/cameron/angelas files/100faces/'
 #data_path = '/media/cameron/nvme1/celeb-ms-cropped-aligned/'
 data_path = '/run/user/1000/gvfs/smb-share:server=milkcrate.local,share=datasets/ms-celeb-tf/'
@@ -101,7 +103,7 @@ global epochs_since_restart
 global how_many_epochs_before_restart
 
 epochs_since_restart = 0
-how_many_epochs_before_restart = 30
+how_many_epochs_before_restart = 10
 
 
 def restart():
@@ -317,7 +319,7 @@ class CustomCallback(keras.callbacks.Callback):
 
         print(
                 'epochs since last restart: ' + str(epochs_since_restart) +
-                ' epochs remaining until next restart: ' + str(how_many_epochs_before_restart)
+                ' --- epochs remaining until next restart: ' + str(how_many_epochs_before_restart - epochs_since_restart)
               )
 
         if epochs_since_restart == how_many_epochs_before_restart:
@@ -404,16 +406,7 @@ def run_training(model, current_epoch, epochs=10000):
         initial_epoch=current_epoch, batch_size=batch_size
     )
 
-def get_datagenerator(path):
-        # create a data generator
 
-        # note: the folder has to have folders of images, these are the class labels
-        #       but this model ignores class labels
-    datagen = ImageDataGenerator(rescale=1.0/255.0)
-    train_generator = datagen.flow_from_directory(path, batch_size=batch_size, shuffle=True,
-                                                  class_mode='input', color_mode="rgb"
-                                                  , target_size=(64, 64))
-    return train_generator
 
 
 if __name__ == '__main__':
@@ -431,14 +424,10 @@ if __name__ == '__main__':
 
     with strategy.scope():
 
-        # print('loading dataset ')
-        # datagenerator = load_dataset(data_path)
-
         print('starting the datagenerator')
 
-        datagenerator = get_datagenerator(data_path)
-        print('starting datagen')
         #datagenerator = get_datagenerator(data_path)
+
 
         dataset = load_dataset(data_path, batch_size=batch_size)
 
@@ -447,7 +436,7 @@ if __name__ == '__main__':
 
         if TRAINING == True:
             print('running training')
-            model.datagenerator = datagenerator
+            model.dataset = dataset
 
             if current_epoch == 0:
                 do_inference(model, None, batch_size=batch_size)
@@ -457,5 +446,5 @@ if __name__ == '__main__':
             run_training(model, current_epoch, epochs=10000)
         else:
             print("just doing inference")
-            model.datagenerator = datagenerator
+            model.dataset = dataset
             model = do_inference(model, epoch=None, batch_size=batch_size)

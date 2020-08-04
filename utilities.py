@@ -1,5 +1,5 @@
 
-from vae import *
+
 from PIL import Image
 import pickle
 import numpy as np
@@ -14,33 +14,19 @@ from tensorflow.keras.layers import Input, Add
 import os
 
 verbose = False
+batch_size = 64 #todo: remove this
 
-def load_dataset(save_path):
-    # load the dataset
-
-    print('loading tensor_spec from pkl file')
-    tensor_spec = pickle.load(open(save_path + "tensor_spec.pkl", "rb"))
-
-    print('loading dataset from files.')
-    loaded_dataset = tf.data.experimental.load(path=save_path, element_spec=tensor_spec)
-    #loaded_dataset = tf.data.experimental.load(path=save_path, compression='GZIP', element_spec=tensor_spec)
-
-    # print('caching dataset to file ')
-    # loaded_dataset = loaded_dataset.cache(save_path + 'cache_file.tf')
-
-    print('loaded dataset')
-    print(type(loaded_dataset))
-
-    return loaded_dataset
-
-
-# class_mode='input' is for autoencoders
-def get_datagenerator(path, batch_size):
+def get_datagenerator(path):
     # create a data generator
-    print('loading data...')
-    datagen = ImageDataGenerator(rescale=(1 / 255))
-    train_generator = datagen.flow_from_directory(path, batch_size=batch_size, shuffle=False, class_mode=None, target_size=(64, 64))
+
+    # note: the folder has to have folders of images, these are the class labels
+    #       but this model ignores class labels
+    datagen = ImageDataGenerator(rescale=1.0 / 255.0)
+    train_generator = datagen.flow_from_directory(path, batch_size=batch_size, shuffle=True,
+                                                  class_mode='input', color_mode="rgb"
+                                                  , target_size=(64, 64))
     return train_generator
+
 
 def concat_four_h(im1, im2, im3, im4):
     ## concatenates four images horizontally
@@ -76,6 +62,10 @@ def load_dataset(save_path, batch_size):
 
     print('unbatching loaded dataset')
     loaded_dataset = loaded_dataset.unbatch()
+
+    print('shuffling dataset')
+    loaded_dataset.shuffle(buffer_size=1000, reshuffle_each_iteration=True)
+
     print('batching dataset')
     loaded_dataset = loaded_dataset.batch(batch_size)
 
@@ -115,7 +105,6 @@ def do_inference(model, epoch, batch_size=64):
     batch = list(batch.as_numpy_iterator())
 
     batch = batch[0][0] # remove both extra dimensions
-    print(batch.shape)
 
     # in this little one-liner we unzip the tuples of images and their labels and discard the labels
     #batch = list(zip(*batch))[0]
