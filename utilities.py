@@ -69,9 +69,6 @@ def load_dataset(save_path, batch_size):
     print('batching dataset')
     loaded_dataset = loaded_dataset.batch(batch_size)
 
-    # print('caching dataset to file ')
-    # loaded_dataset = loaded_dataset.cache(save_path + 'cache_file.tf')
-
     return loaded_dataset
 
 

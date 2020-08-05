@@ -369,42 +369,51 @@ def compile_model(latent_dim, training=True):
 
     ## Combine both into one VAE model
     model = VAE(encoder, decoder)
+
     optimizer = tf.keras.optimizers.Adam(LEARNING_RATE)
+
     model.compile(optimizer=optimizer)
-
     model.build(input_shape=(None, 64, 64, 3))
-
-    model.loaded = True
 
     return model
 
 
-def run_training(model, current_epoch, epochs=10000):
-    # log(type(model))
-    print('steps per epoch = ' + str(steps_per_epoch))
+# def run_training(model, current_epoch, epochs=10000):
+#     # log(type(model))
+#     print('steps per epoch = ' + str(steps_per_epoch))
+#
+#     callbacks = [
+#         # This callback saves a SavedModel every epoch
+#         # We include the current epoch in the folder name.
+#         # keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
+#         keras.callbacks.ModelCheckpoint(
+#             filepath=checkpoint_dir + "/cpkt-{epoch}.h5", save_freq="epoch"
+#         ),
+#         keras.callbacks.TensorBoard(
+#             log_dir='./logs', update_freq=100, profile_batch='1,100000'
+#         ),
+#         CustomCallback()
+#     ]
+#
+#     print('starting training from epoch ' + str(current_epoch))
+#
+#     model.fit(
+#         dataset, verbose=1,
+#         steps_per_epoch=steps_per_epoch,
+#         epochs=epochs,
+#         callbacks=callbacks,
+#         initial_epoch=current_epoch, batch_size=batch_size
+#     )
 
-    callbacks = [
-        # This callback saves a SavedModel every epoch
-        # We include the current epoch in the folder name.
-        # keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
-        keras.callbacks.ModelCheckpoint(
-            filepath=checkpoint_dir + "/cpkt-{epoch}.h5", save_freq="epoch"
-        ),
-        keras.callbacks.TensorBoard(
-            log_dir='./logs', update_freq=100, profile_batch='1,100000'
-        ),
-        CustomCallback()
-    ]
+def train(model, dataset):
+    while True:
+        batch = dataset.take(1)
+        batch = list(batch.as_numpy_iterator())
+        batch = batch[0][0]  # remove both extra dimensions
 
-    print('starting training from epoch ' + str(current_epoch))
+        step_result = model.train_step(batch)
 
-    model.fit(
-        dataset, verbose=1,
-        steps_per_epoch=steps_per_epoch,
-        epochs=epochs,
-        callbacks=callbacks,
-        initial_epoch=current_epoch, batch_size=batch_size
-    )
+        print(str(step_result))
 
 
 
@@ -422,29 +431,30 @@ if __name__ == '__main__':
     strategy = tf.distribute.MirroredStrategy()
     print("Number of devices: {}".format(strategy.num_replicas_in_sync))
 
-    with strategy.scope():
+    # with strategy.scope():
 
-        print('starting the datagenerator')
+    print('starting the datagenerator')
 
-        #datagenerator = get_datagenerator(data_path)
+    #datagenerator = get_datagenerator(data_path)
 
 
-        dataset = load_dataset(data_path, batch_size=batch_size)
+    dataset = load_dataset(data_path, batch_size=batch_size)
 
-        model, current_epoch = load_model(training=TRAINING)
+    model, current_epoch = load_model(training=TRAINING)
+    model.dataset = dataset
+
+    if TRAINING == True:
+        print('running training')
         model.dataset = dataset
 
-        if TRAINING == True:
-            print('running training')
-            model.dataset = dataset
-
-            if current_epoch == 0:
-                do_inference(model, None, batch_size=batch_size)
-            else:
-                do_inference(model, current_epoch, batch_size=batch_size)
-
-            run_training(model, current_epoch, epochs=10000)
+        if current_epoch == 0:
+            do_inference(model, None, batch_size=batch_size)
         else:
-            print("just doing inference")
-            model.dataset = dataset
-            model = do_inference(model, epoch=None, batch_size=batch_size)
+            do_inference(model, current_epoch, batch_size=batch_size)
+
+        train(model, dataset)
+        #run_training(model, current_epoch, epochs=10000)
+    else:
+        print("just doing inference")
+        model.dataset = dataset
+        model = do_inference(model, epoch=None, batch_size=batch_size)
