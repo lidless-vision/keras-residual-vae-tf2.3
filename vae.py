@@ -54,6 +54,7 @@ from tensorflow.keras.layers import Input, Add
 from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, AveragePooling2D, Flatten, Conv2DTranspose
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+from tqdm import trange
 
 import gc
 
@@ -405,17 +406,20 @@ def compile_model(latent_dim, training=True):
 #         initial_epoch=current_epoch, batch_size=batch_size
 #     )
 
-def train(model, dataset):
-    while True:
-        batch = dataset.take(1)
-        batch = list(batch.as_numpy_iterator())
-        batch = batch[0][0]  # remove both extra dimensions
+def train(model, dataset, current_epoch, total_epochs):
 
-        step_result = model.train_step(batch)
+    for i in range(current_epoch, total_epochs):
 
-        print(str(step_result))
+        #print('doing epoch ' + str(i) + '/' + str(total_epochs))
 
+        for x in trange(steps_per_epoch, desc='current epoch: ' + str(i) + '/' + str(total_epochs)):
+            batch = dataset.take(1)
+            batch = list(batch.as_numpy_iterator())
+            batch = batch[0][0]  # remove both extra dimensions
 
+            step_result = model.train_step(batch)
+        print(step_result)
+            #print(str(step_result))
 
 
 if __name__ == '__main__':
@@ -435,9 +439,6 @@ if __name__ == '__main__':
 
     print('starting the datagenerator')
 
-    #datagenerator = get_datagenerator(data_path)
-
-
     dataset = load_dataset(data_path, batch_size=batch_size)
 
     model, current_epoch = load_model(training=TRAINING)
@@ -452,7 +453,7 @@ if __name__ == '__main__':
         else:
             do_inference(model, current_epoch, batch_size=batch_size)
 
-        train(model, dataset)
+        train(model, dataset, current_epoch, total_epochs=10000)
         #run_training(model, current_epoch, epochs=10000)
     else:
         print("just doing inference")

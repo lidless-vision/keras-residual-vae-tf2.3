@@ -69,6 +69,9 @@ def load_dataset(save_path, batch_size):
     print('batching dataset')
     loaded_dataset = loaded_dataset.batch(batch_size)
 
+    print('prefetching dataset')
+    loaded_dataset = loaded_dataset.prefetch(100)
+
     return loaded_dataset
 
 
