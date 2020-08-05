@@ -7,10 +7,6 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 """
 
 
-
-
-
-
 #todo: This branch is the version which was modified to use the new tf.data
 # functions where the model.fit() function is passed a dataset rather than a data_generator
 #       this is preferable so we dont have to wait 10 minutes for
@@ -19,24 +15,7 @@ Description: Guide to multi-GPU & distributed training for Keras models.
 #       in order to avoid the memory leak
 #       https://github.com/tensorflow/tensorflow/issues/35030
 
-# this configuration does one epoch and then reboots.
-
-
-#todo: every tiem it reboots ,the shuffling has obviosuly not happened so this is very broken
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#todo: just kidding, this uses up the enirety of my ram before even one epoch finishes
 
 
 
@@ -57,6 +36,7 @@ from tensorflow.keras.layers import Input, Add
 from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, AveragePooling2D, Flatten, Conv2DTranspose
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+from tqdm import trange
 
 import gc
 
@@ -68,7 +48,7 @@ verbose = False
 #   then we added another 0 to the learning rate, which i think is what we're supposed to do.
 
 LEARNING_RATE = 0.00001
-steps_per_epoch = 1000
+steps_per_epoch = 100
 
 latent_dim = 8
 batch_size = 64
@@ -106,7 +86,7 @@ global epochs_since_restart
 global how_many_epochs_before_restart
 
 epochs_since_restart = 0
-how_many_epochs_before_restart = 1
+how_many_epochs_before_restart = 10
 
 
 def restart():
@@ -322,7 +302,7 @@ class CustomCallback(keras.callbacks.Callback):
 
         print(
                 'epochs since last restart: ' + str(epochs_since_restart) +
-                ' epochs remaining until next restart: ' + str(how_many_epochs_before_restart - epochs_since_restart)
+                ' --- epochs remaining until next restart: ' + str(how_many_epochs_before_restart - epochs_since_restart)
               )
 
         if epochs_since_restart == how_many_epochs_before_restart:
@@ -372,44 +352,56 @@ def compile_model(latent_dim, training=True):
 
     ## Combine both into one VAE model
     model = VAE(encoder, decoder)
+
     optimizer = tf.keras.optimizers.Adam(LEARNING_RATE)
+
     model.compile(optimizer=optimizer)
-
     model.build(input_shape=(None, 64, 64, 3))
-
-    model.loaded = True
 
     return model
 
 
-def run_training(model, current_epoch, epochs=10000):
-    # log(type(model))
-    print('steps per epoch = ' + str(steps_per_epoch))
+# def run_training(model, current_epoch, epochs=10000):
+#     # log(type(model))
+#     print('steps per epoch = ' + str(steps_per_epoch))
+#
+#     callbacks = [
+#         # This callback saves a SavedModel every epoch
+#         # We include the current epoch in the folder name.
+#         # keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
+#         keras.callbacks.ModelCheckpoint(
+#             filepath=checkpoint_dir + "/cpkt-{epoch}.h5", save_freq="epoch"
+#         ),
+#         keras.callbacks.TensorBoard(
+#             log_dir='./logs', update_freq=100, profile_batch='1,100000'
+#         ),
+#         CustomCallback()
+#     ]
+#
+#     print('starting training from epoch ' + str(current_epoch))
+#
+#     model.fit(
+#         dataset, verbose=1,
+#         steps_per_epoch=steps_per_epoch,
+#         epochs=epochs,
+#         callbacks=callbacks,
+#         initial_epoch=current_epoch, batch_size=batch_size
+#     )
 
-    callbacks = [
-        # This callback saves a SavedModel every epoch
-        # We include the current epoch in the folder name.
-        # keras.callbacks.experimental.BackupAndRestore(backup_dir='backup/'),
-        keras.callbacks.ModelCheckpoint(
-            filepath=checkpoint_dir + "/cpkt-{epoch}.h5", save_freq="epoch"
-        ),
-        keras.callbacks.TensorBoard(
-            log_dir='./logs', update_freq=100, profile_batch='1,100000'
-        ),
-        CustomCallback()
-    ]
+def train(model, dataset, current_epoch, total_epochs):
 
-    print('starting training from epoch ' + str(current_epoch))
+    for i in range(current_epoch, total_epochs):
 
-    model.fit(
-        dataset, verbose=1,
-        steps_per_epoch=steps_per_epoch,
-        epochs=epochs,
-        callbacks=callbacks,
-        initial_epoch=current_epoch, batch_size=batch_size
-    )
+        #print('doing epoch ' + str(i) + '/' + str(total_epochs))
 
+        for x in trange(steps_per_epoch, desc='current epoch: ' + str(i) + '/' + str(total_epochs)):
+            batch = dataset.take(1)
+            batch = list(batch.as_numpy_iterator())
+            batch = batch[0][0]  # remove both extra dimensions
 
+            step_result = model.train_step(batch)
+        print(step_result)
+            #print(str(step_result))
 
 
 if __name__ == '__main__':
@@ -425,29 +417,27 @@ if __name__ == '__main__':
     strategy = tf.distribute.MirroredStrategy()
     print("Number of devices: {}".format(strategy.num_replicas_in_sync))
 
-    with strategy.scope():
+    # with strategy.scope():
 
-        print('starting the datagenerator')
+    print('starting the datagenerator')
 
-        #datagenerator = get_datagenerator(data_path)
+    dataset = load_dataset(data_path, batch_size=batch_size)
 
+    model, current_epoch = load_model(training=TRAINING)
+    model.dataset = dataset
 
-        dataset = load_dataset(data_path, batch_size=batch_size)
-
-        model, current_epoch = load_model(training=TRAINING)
+    if TRAINING == True:
+        print('running training')
         model.dataset = dataset
 
-        if TRAINING == True:
-            print('running training')
-            model.dataset = dataset
-
-            if current_epoch == 0:
-                do_inference(model, None, batch_size=batch_size)
-            else:
-                do_inference(model, current_epoch, batch_size=batch_size)
-
-            run_training(model, current_epoch, epochs=10000)
+        if current_epoch == 0:
+            do_inference(model, None, batch_size=batch_size)
         else:
-            print("just doing inference")
-            model.dataset = dataset
-            model = do_inference(model, epoch=None, batch_size=batch_size)
+            do_inference(model, current_epoch, batch_size=batch_size)
+
+        train(model, dataset, current_epoch, total_epochs=10000)
+        #run_training(model, current_epoch, epochs=10000)
+    else:
+        print("just doing inference")
+        model.dataset = dataset
+        model = do_inference(model, epoch=None, batch_size=batch_size)
